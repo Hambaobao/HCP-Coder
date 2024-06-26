@@ -2,7 +2,7 @@
 
 ### Requirements
 
-- Run `pip install -r requiremnets.txt` to install all requirements.
+- Run `pip install -r requirements.txt` to install all requirements.
 
 
 
