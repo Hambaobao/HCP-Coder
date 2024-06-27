@@ -1,5 +1,9 @@
 ## Hierarchical Context Pruning: Optimizing Real-World Code Completion with Repository-Level Pretrained Code LLMs
 
+<a href='https://arxiv.org/abs/2406.18294'><img src='https://img.shields.io/badge/Arxiv-Paper-red'></a>
+
+
+
 ### Requirements
 
 - Run `pip install -r requirements.txt` to install all requirements.
@@ -41,3 +45,22 @@ The script `python create_completion_metadata.py` will generate different code c
 	- `--truncate`: Wether to truncate the input to the model max length.
 2. The script `python evaluate.py` will calculate the **Excatly Mact(EM)** and **Edit Similarity(ES)** metrics:
 	- `--input_file`: The path to Code LLM's completion results.
+
+
+
+## Citations
+
+If you find our work useful, please cite us.
+
+```
+@misc{zhang2024hierarchicalcontextpruningoptimizing,
+      title={Hierarchical Context Pruning: Optimizing Real-World Code Completion with Repository-Level Pretrained Code LLMs}, 
+      author={Lei Zhang and Yunshui Li and Jiaming Li and Xiaobo Xia and Jiaxi Yang and Run Luo and Minzheng Wang and Longze Chen and Junhao Liu and Min Yang},
+      year={2024},
+      eprint={2406.18294},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2406.18294}, 
+}
+```
+
