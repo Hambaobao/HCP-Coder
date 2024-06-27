@@ -48,7 +48,7 @@ The script `python create_completion_metadata.py` will generate different code c
 
 
 
-## Citations
+### Citations
 
 If you find our work useful, please cite us.
 
