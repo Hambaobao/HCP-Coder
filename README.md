@@ -1,9 +1,8 @@
 ## Hierarchical Context Pruning: Optimizing Real-World Code Completion with Repository-Level Pretrained Code LLMs
 
+<p align="center">
 <a href='https://arxiv.org/abs/2406.18294'><img src='https://img.shields.io/badge/Arxiv-Paper-red'></a>
-
-
-
+</p>
 ![methedology](assets/methedology.png)
 
 
