@@ -4,6 +4,10 @@
 
 
 
+![methedology](assets/methedology.png)
+
+
+
 ### Requirements
 
 - Run `pip install -r requirements.txt` to install all requirements.
