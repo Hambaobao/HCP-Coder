@@ -1,12 +1,8 @@
 # Hierarchical Context Pruning: Optimizing Real-World Code Completion with Repository-Level Pretrained Code LLMs
 
-<p align="center">
-<a href='https://arxiv.org/abs/2406.18294'><img src='https://img.shields.io/badge/Arxiv-Paper-red'></a>
-</p>
-
-
 ![methedology](assets/methedology.png)
 
+&nbsp;
 
 ## Requirements
 
@@ -207,21 +203,3 @@ python entry.py \
 This script will return the cross-file context and infile context for the given file and position.
 The `top-p` and `top-k` are the hyperparameters for the HCP method.
 You can use the returned context to implement your own application.
-
-&nbsp;
-
-## Citations
-
-If you find our work useful, please cite us.
-
-```
-@misc{zhang2024hierarchicalcontextpruningoptimizing,
-      title={Hierarchical Context Pruning: Optimizing Real-World Code Completion with Repository-Level Pretrained Code LLMs}, 
-      author={Lei Zhang and Yunshui Li and Jiaming Li and Xiaobo Xia and Jiaxi Yang and Run Luo and Minzheng Wang and Longze Chen and Junhao Liu and Min Yang},
-      year={2024},
-      eprint={2406.18294},
-      archivePrefix={arXiv},
-      primaryClass={cs.CL},
-      url={https://arxiv.org/abs/2406.18294}, 
-}
-```
