@@ -1,8 +1,0 @@
-{
-    "reportUnusedVariable": false,
-    "typeCheckingMode": "off",
-    "exclude": [
-        "utils/stimulate/temp",
-        "benchmarks/crosscodeeval/rawdata",
-    ]
-}

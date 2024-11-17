@@ -1,4 +1,3 @@
-import os
 import json
 import argparse
 
@@ -9,6 +8,7 @@ from pathlib import Path
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', type=str, required=True)
+    parser.add_argument('--output_file', type=str, required=False)
     return parser.parse_args()
 
 
@@ -24,9 +24,10 @@ def cal_edit_sim(references, hypotheses):
 
 def evaluate(data):
     outputs = []
-    oom_count, passed_count, edit_sim, non_oom_sidt_sim, total = 0, 0, 0.0, 0.0, len(data)
+    throughput = 0.0
+    passed_count, edit_sim, total = 0, 0.0, len(data)
     for d in data:
-        pred, ref = d['response'].strip(), d['groundtruth'].strip()
+        pred, ref = d['completion'].strip(), d['groundtruth'].strip()
 
         passed = True if pred == ref else False
 
@@ -36,24 +37,26 @@ def evaluate(data):
             'task_id': d['task_id'],
             'file': d['file'],
             'passed': passed,
-            'response': d['response'],
+            'completion': d['completion'],
             'groundtruth': d['groundtruth'],
             'edit_similarity': es,
+            'throughput': d['throughput'],
         })
 
-        if pred == 'OOM':
-            oom_count += 1
+        throughput += d['throughput']
 
         if passed:
             passed_count += 1
         edit_sim += es
 
-        if pred != 'OOM':
-            non_oom_sidt_sim += es
+    results = {
+        "EM": 100 * passed_count / total,
+        "ES": edit_sim / total,
+        "Throughput": throughput / total,
+        "Details": outputs,
+    }
 
-    print(f'> EM Accuracy: {passed_count / total * 100:.2f}%, EM Accuracy (w/o OOM): {passed_count / (total-oom_count) * 100:.2f}%, Edit Similarity: {edit_sim / total:.2f}, Edit Similarity (w/o OOM): {non_oom_sidt_sim / total:.2f}')
-
-    return outputs
+    return results
 
 
 if __name__ == '__main__':
@@ -68,9 +71,7 @@ if __name__ == '__main__':
 
     print('-' * 60)
     print(f'> Evaluating {input_file.name}...')
-    outputs = evaluate(data)
+    results = evaluate(data)
 
-    output_path = os.path.join("results", input_file.name)
-    with open(output_path, 'w') as f:
-        for output in outputs:
-            f.write(json.dumps(output) + '\n')
+    with open(args.output_file, 'w') as f:
+        json.dump(results, f, indent=4)

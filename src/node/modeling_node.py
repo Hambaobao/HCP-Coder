@@ -307,6 +307,9 @@ class FileNode():
         return [ClassNode(**class_) for class_ in classes]
 
     def get_concise_context(self):
+        """
+        This function only used in preliminary study when P-Level=1
+        """
         context = []
         for cls in self.classes:
             context.append(cls.content)
@@ -318,6 +321,9 @@ class FileNode():
         return concise_context
 
     def get_sparse_context(self):
+        """
+        This function only used in preliminary study when P-Level=2
+        """
         context = []
         for cls in self.classes:
             context.append(cls.get_concise_context())
@@ -329,6 +335,9 @@ class FileNode():
         return concise_context
 
     def get_context(self):
+        """
+        This function is used by HCP strategy
+        """
         context = []
         self.score = 0.0
         for cls in self.classes:

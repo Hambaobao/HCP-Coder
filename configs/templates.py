@@ -13,21 +13,15 @@ class DeepseekCoderTemplate:
 
     @staticmethod
     def apply(item: Dict):
-        if item["info_level"] in [
-                "dense_cross_dense_infile",
-                "concise_cross_dense_infile",
-                "sparse_cross_dense_infile",
-                "dense_random_cross_dense_infile",
-                "hierarchical_cross_dense_infile",
-        ]:
-            return DeepseekCoderTemplate.apply_cross_file_completion_template(item)
-        elif item["info_level"] in ["rag"]:
+        if item["strategy"] in ['hcp', 'preliminary', 'random_all']:
+            return DeepseekCoderTemplate.apply_hcp_template(item)
+        elif item["strategy"] in ["rag"]:
             return DeepseekCoderTemplate.apply_rag_context_template(item)
         else:
             raise NotImplementedError
 
     @staticmethod
-    def apply_cross_file_completion_template(item: Dict):
+    def apply_hcp_template(item: Dict):
         context = item["context"]
 
         # build cross-file context for completion
@@ -69,21 +63,15 @@ class Starcoder2Template:
 
     @staticmethod
     def apply(item: Dict):
-        if item["info_level"] in [
-                "dense_cross_dense_infile",
-                "concise_cross_dense_infile",
-                "sparse_cross_dense_infile",
-                "dense_random_cross_dense_infile",
-                "hierarchical_cross_dense_infile",
-        ]:
-            return Starcoder2Template.apply_cross_file_completion_template(item)
-        elif item["info_level"] in ["rag"]:
+        if item["strategy"] in ['hcp', 'preliminary', 'random_all']:
+            return Starcoder2Template.apply_hcp_template(item)
+        elif item["strategy"] in ["rag"]:
             return Starcoder2Template.apply_rag_context_template(item)
         else:
             raise NotImplementedError
 
     @staticmethod
-    def apply_cross_file_completion_template(item: Dict):
+    def apply_hcp_template(item: Dict):
         context = item["context"]
         repo_name = context["repo_name"]
 
@@ -124,21 +112,15 @@ class CodeGemmaTemplate:
 
     @staticmethod
     def apply(item: Dict):
-        if item["info_level"] in [
-                "dense_cross_dense_infile",
-                "concise_cross_dense_infile",
-                "sparse_cross_dense_infile",
-                "dense_random_cross_dense_infile",
-                "hierarchical_cross_dense_infile",
-        ]:
-            return CodeGemmaTemplate.apply_cross_file_completion_template(item)
-        elif item["info_level"] in ["rag"]:
+        if item["strategy"] in ['hcp', 'preliminary', 'random_all']:
+            return CodeGemmaTemplate.apply_hcp_template(item)
+        elif item["strategy"] in ["rag"]:
             return CodeGemmaTemplate.apply_rag_context_template(item)
         else:
             raise NotImplementedError
 
     @staticmethod
-    def apply_cross_file_completion_template(item: Dict):
+    def apply_hcp_template(item: Dict):
         context = item["context"]
 
         # build cross-file context for completion
@@ -165,8 +147,67 @@ class CodeGemmaTemplate:
         return prompt
 
 
+class Qwen25CoderTemplate:
+    EOS_TOKEN: str = "<|endoftext|>"
+    SPLIT_TOKEN: str = ""
+    STOP_TOKENS: list[str] = [
+        "<|repo_name|>",
+        "<|file_sep|>",
+        "<|fim_prefix|>",
+        "<|fim_suffix|>",
+        "<|fim_middle|>",
+        "<|endoftext|>",
+    ]
+
+    @staticmethod
+    def apply(item: Dict):
+        if item["strategy"] in ['hcp', 'preliminary', 'random_all']:
+            return Qwen25CoderTemplate.apply_hcp_template(item)
+        elif item["strategy"] in ["rag"]:
+            return Qwen25CoderTemplate.apply_rag_context_template(item)
+        else:
+            raise NotImplementedError
+
+    @staticmethod
+    def apply_hcp_template(item: Dict):
+        context = item["context"]
+        repo_name = context["repo_name"]
+
+        # build cross-file context for completion
+        cross_file_prompt = f"<|repo_name|>{repo_name}\n"
+        cross_file_context = context["cross_file_context"]
+        for file in cross_file_context:
+            cross_file_prompt += f"<|file_sep|>{file}\n{cross_file_context[file]}\n"
+
+        # build in-file context for completion
+        file = item["file"]
+        infile_context = context["infile_context"]
+        infile_prompt = f"<|file_sep|>{file}<|fim_prefix|>{infile_context['prefix']}<|fim_suffix|>{infile_context['suffix']}<|fim_middle|>"
+
+        return cross_file_prompt + infile_prompt
+
+    @staticmethod
+    def apply_rag_context_template(item: Dict):
+        context = item["context"]
+        prefix = item["prefix"]
+        suffix = item["suffix"]
+
+        prompt = f"{context}<|fim_prefix|>{prefix}<|fim_suffix|>{suffix}<|fim_middle|>"
+
+        return prompt
+
+
 TemplatesMapping = {
-    "deepseek-coder": DeepseekCoderTemplate,
-    "starcoder2": Starcoder2Template,
-    "codegemma": CodeGemmaTemplate,
+    "deepseek-coder-1.3b-base": DeepseekCoderTemplate,
+    "deepseek-coder-6.7b-base": DeepseekCoderTemplate,
+    "starcoder2-3b": Starcoder2Template,
+    "starcoder2-7b": Starcoder2Template,
+    "codegemma-2b": CodeGemmaTemplate,
+    "codegemma-7b": CodeGemmaTemplate,
+    "DeepSeek-Coder-V2-Lite-Base": DeepseekCoderTemplate,
+    "Qwen2.5-Coder-0.5B": Qwen25CoderTemplate,
+    "Qwen2.5-Coder-1.5B": Qwen25CoderTemplate,
+    "Qwen2.5-Coder-3B": Qwen25CoderTemplate,
+    "Qwen2.5-Coder-7B": Qwen25CoderTemplate,
+    "Qwen2.5-Coder-14B": Qwen25CoderTemplate,
 }

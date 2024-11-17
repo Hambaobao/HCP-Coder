@@ -1,133 +1,131 @@
-import torch
 import json
-import time
+import argparse
 
-from tqdm import tqdm
 from typing import List, Dict
-from dataclasses import dataclass, field
-from transformers import HfArgumentParser, AutoTokenizer, AutoModelForCausalLM, PreTrainedTokenizer
+from vllm import LLM, SamplingParams, RequestOutput
+from pathlib import Path
 
-from utils.templates import TemplatesMapping
-
-MAX_NEW_TOKENS = 32
-
-MODEL_MAX_LENGTH_MAPPING = {
-    "deepseek-coder": 16 * 1024 - MAX_NEW_TOKENS,
-    "starcoder2": 16 * 1024 - MAX_NEW_TOKENS,
-    "codegemma": 8 * 1024 - MAX_NEW_TOKENS,
-}
+from configs import (
+    SUPPORTED_MODELS,
+    MODEL_MAX_LENGTH_MAPPING,
+    TemplatesMapping,
+    MAX_NEW_TOKENS,
+)
 
 
-@dataclass
-class CompletionArguments:
-    model_name_or_path: str = field(default="bigcode/starcoder2", metadata={"help": "The model checkpoint for weights initialization."})
-    data_file: str = field(default="data.jsonl", metadata={"help": "The data file to use for training."})
-    output_file: str = field(default="output.jsonl", metadata={"help": "The output file to save the results."})
-    truncate: bool = field(default=True, metadata={"help": "Truncate the input to the model max length."})
+def parse_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--model_name_or_path", type=str, required=True)
+    parser.add_argument("--input_file", type=str, required=True)
+    parser.add_argument("--output_file", type=str, required=True)
+    parser.add_argument("--tensor_parallel_size", type=int, default=1)
+
+    return parser.parse_args()
 
 
-def postprocess(template, raw_response: str) -> str:
-    _raw_response = raw_response
-    # this is solution to remove stop tokens for CodeGemma
-    for stop_word in template.STOP_TOKENS:
-        _raw_response = _raw_response.split(stop_word)[0]
-    return _raw_response
-
-
-def completion(
+def do_complete(
+    model: LLM,
     data: List[Dict],
-    model_name: str,
-    model: AutoModelForCausalLM,
-    tokenizer: PreTrainedTokenizer,
-    truncate: bool,
+    template,
+    max_prompt_tokens: int,
 ):
 
-    template = TemplatesMapping[model_name]
-    terminators = tokenizer.convert_tokens_to_ids(template.STOP_TOKENS)
+    tokenizer = model.get_tokenizer()
+    assert tokenizer.truncation_side == "left", "Truncation side must be left."
+    stop_token_ids = tokenizer.convert_tokens_to_ids(template.STOP_TOKENS)
 
-    outputs = []
-    for item in tqdm(data):
-        prompt = template.apply(item)
+    prompts = [template.apply(item) for item in data]
+    prompt_token_ids = [tokenizer.encode(prompt) for prompt in prompts]
+    truncated_prompt_token_ids = [tokenizer.encode(
+        prompt,
+        truncation=True,
+        max_length=max_prompt_tokens,
+    ) for prompt in prompts]
 
-        inputs = tokenizer(
-            prompt,
-            return_tensors="pt",
-            truncation=truncate,
-        ).to(model.device)
+    vllm_outputs = model.generate(
+        prompt_token_ids=truncated_prompt_token_ids,
+        sampling_params=SamplingParams(
+            max_tokens=MAX_NEW_TOKENS,
+            temperature=0.0,
+            top_p=1.0,
+            stop=template.STOP_TOKENS,
+            stop_token_ids=stop_token_ids,
+        ),
+    )
 
-        tokenized_prompt_length = len(inputs["input_ids"][0])
-        num_new_tokens = 0
+    completions = [item.outputs[0].text for item in vllm_outputs]
 
-        start = time.time()
-        try:
-            output = model.generate(
-                **inputs,
-                max_new_tokens=MAX_NEW_TOKENS,  # max number of tokens to generate
-                do_sample=False,  # greedy decoding
-                pad_token_id=tokenizer.eos_token_id,
-                eos_token_id=terminators,
-            )
-            num_new_tokens = len(output[0]) - tokenized_prompt_length
-            raw_response = tokenizer.decode(output[0][tokenized_prompt_length:])
-        except Exception as e:
-            print(f"Error: {e}")
-            raw_response = "OOM"
-        end = time.time()
+    def get_throughput(item: RequestOutput) -> int:
+        num_tokens = len(item.outputs[0].token_ids)
+        metrics = item.metrics
+        generation_time = metrics.finished_time - metrics.arrival_time - metrics.scheduler_time
+        throughput = num_tokens / generation_time
+        return throughput
 
-        # calculate the speed of the model
-        time_elapsed = end - start
-        token_per_second = num_new_tokens / time_elapsed
+    throughputs = [get_throughput(item) for item in vllm_outputs]
 
-        # postprocess the response if nessasary
-        response = postprocess(template, raw_response)
-
-        outputs.append({
-            "task_id": item["task_id"],
-            "response": response,
-            "raw_response": raw_response,
-            "groundtruth": item["groundtruth"],
-            "prompt_length": len(prompt),
-            "tokenized_prompt_length": tokenized_prompt_length,
-            "num_new_tokens": num_new_tokens,
-            "time_elapsed": time_elapsed,
-            "token_per_second": token_per_second,
-            "prompt": prompt,
-            "file": item["file"],
-        })
+    outputs = [{
+        "task_id": item["task_id"],
+        "completion": completion,
+        "groundtruth": item["groundtruth"],
+        "prompt_length": len(prompt),
+        "num_prompt_tokens": len(prompt_token_id),
+        "num_truncated_prompt_tokens": len(truncated_prompt_token_id),
+        "throughput": throughput,
+        "prompt": prompt,
+        "file": item["file"],
+    } for (
+        item,
+        prompt,
+        completion,
+        prompt_token_id,
+        truncated_prompt_token_id,
+        throughput,
+    ) in zip(
+        data,
+        prompts,
+        completions,
+        prompt_token_ids,
+        truncated_prompt_token_ids,
+        throughputs,
+    )]
 
     return outputs
 
 
 if __name__ == "__main__":
 
-    parser = HfArgumentParser((CompletionArguments))
-    args = parser.parse_args_into_dataclasses()[0]
+    args = parse_args()
 
-    model_names = ["starcoder2", "deepseek-coder", "codegemma"]
-    model_name = next((name for name in model_names if name in args.model_name_or_path), None)
-    assert model_name is not None, "Model name must be one of starcoder2, codegemma, or deepseek-coder"
+    model_name = args.model_name_or_path.split("/")[-1]
 
-    tokenizer = AutoTokenizer.from_pretrained(
+    assert model_name in SUPPORTED_MODELS, f"Model {model_name} is not supported."
+
+    if Path(args.output_file).exists():
+        print(f"Output file {args.output_file} already exists.")
+        exit(0)
+
+    model = LLM(
         args.model_name_or_path,
-        use_fast=True,
-        model_max_length=MODEL_MAX_LENGTH_MAPPING[model_name],
-        truncation_side="left",
+        trust_remote_code=True,
+        enforce_eager=True,
+        gpu_memory_utilization=0.98,
+        tensor_parallel_size=args.tensor_parallel_size,
+        max_model_len=MODEL_MAX_LENGTH_MAPPING[model_name],
+        distributed_executor_backend="ray",
     )
 
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_name_or_path,
-        torch_dtype=torch.bfloat16,
-        device_map="cuda",
-        attn_implementation="flash_attention_2",
-    ).eval()
-    model = torch.compile(model, mode='default')
-
-    with open(args.data_file, "r") as f:
+    with open(args.input_file, "r") as f:
         data = [json.loads(line) for line in f]
 
-    print("> Truncate:", args.truncate)
-    outputs = completion(data, model_name, model, tokenizer, args.truncate)
+    template = TemplatesMapping[model_name]
 
+    max_prompt_tokens = MODEL_MAX_LENGTH_MAPPING[model_name] - MAX_NEW_TOKENS
+
+    outputs = do_complete(model, data, template, max_prompt_tokens)
+
+    Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
     with open(args.output_file, "w") as f:
         for output in outputs:
             f.write(json.dumps(output) + "\n")

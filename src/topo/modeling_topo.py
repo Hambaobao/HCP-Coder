@@ -4,19 +4,17 @@ from pathlib import Path
 from typing import List, Dict
 
 from src.node.modeling_node import FileNode
-from src.retriever import OpenAIRetriever
+from src.retriever import AutoRetriever
 
 random.seed(42)
 
 
 class RepoTopo():
     supported_filetypes: List[str] = ['.py', '.pyi']
-    supported_infolevels: List[str] = [
-        'dense_cross_dense_infile',
-        'concise_cross_dense_infile',
-        'sparse_cross_dense_infile',
-        'dense_random_cross_dense_infile',
-        'hierarchical_cross_dense_infile',
+    supported_strategies: List[str] = [
+        'random_all',
+        'preliminary',
+        'hcp',
     ]
 
     def __init__(
@@ -49,39 +47,55 @@ class RepoTopo():
 
     def get_completion_context(
         self,
-        file_path: str,
-        row: int,
-        col: int,
-        dependency_level: int = 0,
-        info_level: str = 'dense_cross_dense_infile',
+        strategy: str = 'hcp',
+        d_level: int = 0,
+        p_level: int = 0,
+        file_path: str = None,
+        row: int = None,
+        col: int = None,
         top_k: List[int] = [5],
-        top_p: List[float] = [0.1],
+        top_p: List[float] = [0.3],
     ) -> str:
 
-        assert info_level in self.supported_infolevels, "Invalid info_level"
+        assert strategy in self.supported_strategies, "Invalid strategy"
 
         file_node = self.file_nodes.get(str(self.repo_name_or_path / Path(file_path)))
 
-        if 'dense_cross' in info_level:
-            cross_file_context = self.get_dense_cross_file_context(file_node, dependency_level)
-        elif 'concise_cross' in info_level:
-            cross_file_context = self.get_concise_cross_file_context(file_node, dependency_level)
-        elif 'sparse_cross' in info_level:
-            cross_file_context = self.get_sparse_cross_file_context(file_node, dependency_level)
-        elif 'dense_random_cross' in info_level:
+        if strategy == 'random_all':
             cross_file_context = self.get_random_dense_cross_file_context(file_node)
-        elif 'hierarchical_cross' in info_level:
+        elif strategy == 'preliminary':
+            if p_level == 0:
+                cross_file_context = self.get_dense_cross_file_context(
+                    file_node,
+                    d_level,
+                )
+            elif p_level == 1:
+                cross_file_context = self.get_concise_cross_file_context(
+                    file_node,
+                    d_level=d_level,
+                )
+            elif p_level == 2:
+                cross_file_context = self.get_sparse_cross_file_context(
+                    file_node,
+                    d_level,
+                )
+            else:
+                raise ValueError("Invalid p_level")
+        elif strategy == 'hcp':
+            retriever = AutoRetriever(engine='openai')
             cross_file_context = self.get_hierarchical_cross_file_context(
+                retriever,
                 file_node,
-                row,
-                col,
-                dependency_level,
-                top_k,
-                top_p,
+                row=row,
+                col=col,
+                top_k=top_k,
+                top_p=top_p,
             )
+        else:
+            raise ValueError("Invalid strategy")
 
-        if 'dense_infile' in info_level:
-            infile_context = self.get_dense_infile_context(file_node, row, col)
+        # we use dense infile context for all strategies
+        infile_context = self.get_infile_context(file_node, row, col)
 
         return {
             "repo_name": self.repo_name_or_path.split('/')[-1],
@@ -91,15 +105,18 @@ class RepoTopo():
 
     def get_hierarchical_cross_file_context(
         self,
+        retriever: AutoRetriever,
         file_node: FileNode,
         row: int,
         col: int,
-        dependency_level: int,
         top_k: List[int] = [5],
         top_p: List[float] = [0.1],
+        d_level: int = 1,
     ) -> str:
-        dependencies = []
-        self.collect_dependencies(file_node, dependency_level, dependencies)
+        """
+        This funtion is implemented for Our Hierarchical Context Pruning.
+        """
+        dependencies = self.get_dependencies(file_node, d_level)
         dependencies.reverse()
 
         other_files = []
@@ -117,7 +134,7 @@ class RepoTopo():
             for cls in node.classes:
                 candidate_function_nodes.extend(cls.class_method_nodes)
 
-        retriever = OpenAIRetriever()
+        assert len(candidate_function_nodes) > 0, "No candidate function nodes found"
         top_nodes = retriever.retrieve(query_text, candidate_function_nodes, top_k, top_p)
         total_context = {}
         for nodes_info in top_nodes:
@@ -163,6 +180,9 @@ class RepoTopo():
         return total_context
 
     def get_random_dense_cross_file_context(self, file_node: FileNode) -> str:
+        """
+        This function is only used in Random Baseline
+        """
         context = {}
         other_files = []
         for node in self.file_nodes:
@@ -180,9 +200,11 @@ class RepoTopo():
 
         return context
 
-    def get_sparse_cross_file_context(self, file_node: FileNode, dependency_level: int = 1) -> str:
-        dependencies = []
-        self.collect_dependencies(file_node, dependency_level, dependencies)
+    def get_sparse_cross_file_context(self, file_node: FileNode, d_level: int = -1) -> str:
+        """
+        This function is used in Cross-File Content Analysis: p_level=2
+        """
+        dependencies = self.get_dependencies(file_node, d_level)
         dependencies.reverse()
 
         context = {}
@@ -204,15 +226,24 @@ class RepoTopo():
             repo_path = node.repo_path
             file_path = node.file_path
             relative_path = str(Path(repo_path).name / Path(file_path).relative_to(repo_path))
-            content = node.get_concise_context()
+            if d_level == -1:
+                # treat all dependencies as sparse context
+                # used in Cross-File Content Analysis: p_level=2
+                content = node.get_sparse_context()
+            else:
+                # treat dependencies within the specified level as concise context
+                # used in Cross-File Content Analysis: p_level=2 + d_level=1 and p_level=2 + d_level=2
+                content = node.get_concise_context()
             if relative_path not in context:
                 context[relative_path] = content
 
         return context
 
-    def get_concise_cross_file_context(self, file_node: FileNode, dependency_level: int = 1) -> str:
-        dependencies = []
-        self.collect_dependencies(file_node, dependency_level, dependencies)
+    def get_concise_cross_file_context(self, file_node: FileNode, d_level: int = -1) -> str:
+        """
+        This function is only used in Cross-File Content Analysis: p_level=1
+        """
+        dependencies = self.get_dependencies(file_node, d_level)
         dependencies.reverse()
 
         context = {}
@@ -240,8 +271,12 @@ class RepoTopo():
 
         return context
 
-    def get_dense_cross_file_context(self, file_node: FileNode, dependency_level: int) -> str:
-        dependencies = self.get_dependencies(file_node, dependency_level)
+    def get_dense_cross_file_context(self, file_node: FileNode, d_level: int = -1) -> str:
+        """
+        This function is used in Topological Dependency Analysis: d_level=0, d_level=1, d_level=2, d_level=3, 
+        d_level=4, d_level=inf and Cross-File Content Analysis: p_level=0
+        """
+        dependencies = self.get_dependencies(file_node, d_level)
         dependencies.reverse()
 
         context = {}
@@ -254,7 +289,7 @@ class RepoTopo():
                 context[relative_path] = content
         return context
 
-    def get_dense_infile_context(self, file_node: FileNode, row: int, col: int) -> str:
+    def get_infile_context(self, file_node: FileNode, row: int, col: int) -> str:
         lines = file_node.content.split('\n')
         prefix_lines = lines[:row]
         suffix_lines = lines[row:]
@@ -265,43 +300,44 @@ class RepoTopo():
             "suffix": suffix,
         }
 
-    def get_dependencies(self, file_node, dependency_level) -> List[FileNode]:
+    def get_dependencies(self, file_node, d_level) -> List[FileNode]:
+
+        def collect_dependencies(
+            file_node: FileNode,
+            d_level: int,
+            dependencies: List[FileNode],
+        ) -> List[FileNode]:
+
+            assert d_level >= 0, "Dependency level must be a non-negative integer"
+
+            if d_level == 0:
+                return
+
+            for dep_path in file_node.dependencies:
+                if self.file_nodes[dep_path] not in dependencies:
+                    dependencies.append(self.file_nodes[dep_path])
+                collect_dependencies(self.file_nodes[dep_path], d_level - 1, dependencies)
+
         dependencies = []
-        if dependency_level == -100:
-            self.collect_dependencies(
+
+        if d_level == -1:
+            # including all repo files according to the dependency level
+            # including dependency files within 3 levels
+            collect_dependencies(
                 file_node,
                 3,  # 3 is a large enough number to get nessasary dependencies
                 dependencies,
             )
+            # then including all other files
             for node in self.file_nodes:
                 if self.file_nodes[node] != file_node and self.file_nodes[node] not in dependencies:
                     dependencies.append(self.file_nodes[node])
         else:
-            self.collect_dependencies(
+            # only including dependency files within the specified level
+            collect_dependencies(
                 file_node,
-                dependency_level,
+                d_level,
                 dependencies,
             )
 
         return dependencies
-
-    def collect_dependencies(
-        self,
-        file_node: FileNode,
-        dependency_level: int,
-        dependencies: List[FileNode],
-    ) -> List[FileNode]:
-
-        assert dependency_level >= 0, "Dependency level must be a non-negative integer"
-
-        if dependency_level == 0:
-            return
-
-        for dep_path in file_node.dependencies:
-            if self.file_nodes[dep_path] not in dependencies:
-                dependencies.append(self.file_nodes[dep_path])
-            self.collect_dependencies(
-                self.file_nodes[dep_path],
-                dependency_level - 1,
-                dependencies,
-            )

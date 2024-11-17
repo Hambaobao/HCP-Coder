@@ -1,7 +1,7 @@
 import os
 
-ROOT = "benchmarks/crosscodeeval/rawdata"
-TEMP = os.path.join(os.path.dirname(os.path.relpath(__file__)), "temp")
+ROOT = "benchmarks/crosscodeeval/raw_data"
+TEMP = "benchmarks/crosscodeeval/real_repos"
 
 
 def build_repo(item: dict):

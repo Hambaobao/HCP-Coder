@@ -1,1 +1,1 @@
-from .openai import OpenAIRetriever
+from .auto import AutoRetriever
