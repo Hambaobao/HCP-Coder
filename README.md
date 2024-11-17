@@ -208,6 +208,7 @@ This script will return the cross-file context and infile context for the given 
 The `top-p` and `top-k` are the hyperparameters for the HCP method.
 You can use the returned context to implement your own application.
 
+&nbsp;
 
 ## Citations
 
