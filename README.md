@@ -1,4 +1,4 @@
-## Hierarchical Context Pruning: Optimizing Real-World Code Completion with Repository-Level Pretrained Code LLMs
+# Hierarchical Context Pruning: Optimizing Real-World Code Completion with Repository-Level Pretrained Code LLMs
 
 <p align="center">
 <a href='https://arxiv.org/abs/2406.18294'><img src='https://img.shields.io/badge/Arxiv-Paper-red'></a>
@@ -8,12 +8,13 @@
 ![methedology](assets/methedology.png)
 
 
-### Requirements
+## Requirements
 
 - Run `pip install -r requirements.txt` to install all requirements.
 
+&nbsp;
 
-### Repository Structure
+## Repository Structure
 
 ```text
 .
@@ -88,10 +89,11 @@
         └── get_prompt_length.py
 ```
 
+&nbsp;
 
-### Dataset
+## Dataset
 
-#### CrossCodeEval Dataset
+### CrossCodeEval Dataset
 1. Download the original data:
 
 	We have constructed the test set using the original data from [CrossCodeEval](https://crosscodeeval.github.io).
@@ -102,12 +104,13 @@
 
 	Run `./scripts/generate_cceval_inputs.sh` to generate the test inputs for the CrossCodeEval dataset.
 
-#### RepoBench Dataset
+### RepoBench Dataset
 
 Simply run `./scripts/generate_repobench_inputs.sh` to download and generate the test inputs for the RepoBench dataset.
 
+&nbsp;
 
-### Sample Inputs
+## Sample Inputs
 
 1. Below is a sample input for the RAG-based methods:
 
@@ -168,7 +171,9 @@ Simply run `./scripts/generate_repobench_inputs.sh` to download and generate the
 }
 ```
 
-### Experiments
+&nbsp;
+
+## Experiments
 
 > [!Note]
 We use OpenAI Text Embedding API to embed the code snippets.
@@ -182,8 +187,10 @@ To Reproduce the experiments in the paper, you can run the following scripts:
 4. Run `./scripts/test_repobench_baselines.sh` to evaluate the baselines on the RepoBench dataset.
 5. Run `./scripts/test_repobench_hcp.sh` to evaluate the HCP method on the RepoBench dataset.
 
+&nbsp;
 
-#### Example
+
+## Example
 
 We provide an simple example to run the HCP method to get the cross-file context and infile context:
 
@@ -202,7 +209,7 @@ The `top-p` and `top-k` are the hyperparameters for the HCP method.
 You can use the returned context to implement your own application.
 
 
-### Citations
+## Citations
 
 If you find our work useful, please cite us.
 
